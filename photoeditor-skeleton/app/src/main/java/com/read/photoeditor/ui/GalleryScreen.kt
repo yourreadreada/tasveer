@@ -16,29 +16,25 @@ import java.util.*
 
 /**
  * Top-level screen: auto-clustered trips, newest first. Tapping a trip opens TripScreen.
- * Includes search functionality by location name and date range filtering based on start date.
+ * Includes date range filtering based on trip start date.
+ *
+ * NOTE: Location search previously attempted to filter on photo.latitude != null, but
+ * latitude is currently null (EXIF GPS parsing is not yet implemented in PhotoRepository).
+ * Location search is removed/disabled until EXIF GPS support is wired up.
  */
 @Composable
 fun GalleryScreen(
     trips: List<Trip>,
     onTripClick: (Trip) -> Unit
 ) {
-    var searchQuery by remember { mutableStateOf("") }
     var startDateFilterMillis by remember { mutableStateOf<Long?>(null) }
     var endDateFilterMillis by remember { mutableStateOf<Long?>(null) }
 
     val dateFormat = remember { SimpleDateFormat("MMM d, yyyy", Locale.getDefault()) }
 
-    // Filtered trips by location name and start date
-    val filteredTrips = remember(trips, searchQuery, startDateFilterMillis, endDateFilterMillis) {
+    // Filtered trips based on start date
+    val filteredTrips = remember(trips, startDateFilterMillis, endDateFilterMillis) {
         trips.filter { trip ->
-            val matchesLocation = if (searchQuery.isBlank()) {
-                true
-            } else {
-                trip.photos.any { it.latitude != null } ||
-                    trip.id.contains(searchQuery, ignoreCase = true)
-            }
-
             val matchesStartDate = startDateFilterMillis?.let { minStart ->
                 trip.startMillis >= minStart
             } ?: true
@@ -47,22 +43,13 @@ fun GalleryScreen(
                 trip.startMillis <= maxStart
             } ?: true
 
-            matchesLocation && matchesStartDate && matchesEndDate
+            matchesStartDate && matchesEndDate
         }
     }
 
     Column(modifier = Modifier.fillMaxSize().padding(12.dp)) {
-        // Search by location name
-        OutlinedTextField(
-            value = searchQuery,
-            onValueChange = { searchQuery = it },
-            label = { Text("Search by location...") },
-            modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
-            singleLine = true
-        )
-
         // Date Range Filter indicator / reset
-        if (startDateFilterMillis != null || endDateFilterMillis != null || searchQuery.isNotBlank()) {
+        if (startDateFilterMillis != null || endDateFilterMillis != null) {
             Row(
                 modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
                 horizontalArrangement = Arrangement.SpaceBetween
@@ -72,11 +59,10 @@ fun GalleryScreen(
                     style = MaterialTheme.typography.bodySmall
                 )
                 TextButton(onClick = {
-                    searchQuery = ""
                     startDateFilterMillis = null
                     endDateFilterMillis = null
                 }) {
-                    Text("Clear filters")
+                    Text("Clear date filter")
                 }
             }
         }
