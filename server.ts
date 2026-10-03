@@ -1,8 +1,10 @@
 import express, { Request, Response } from 'express';
 import cors from 'cors';
 import path from 'path';
+import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { GoogleGenAI } from '@google/genai';
+import { createServer as createViteServer } from 'vite';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -490,17 +492,45 @@ app.get('/api/edit-log/stats', (_req: Request, res: Response) => {
   });
 });
 
-// Serve Vite build in production
-const distPath = path.resolve(__dirname, 'dist');
-app.use(express.static(distPath));
+// Serve Vite in dev or static dist in production
+async function startServer() {
+  const isProduction = process.env.NODE_ENV === 'production';
+  const distPath = path.resolve(__dirname, 'dist');
+  const distIndex = path.resolve(distPath, 'index.html');
 
-app.use((req: Request, res: Response) => {
-  if (req.path.startsWith('/api/')) {
-    return res.status(404).json({ error: 'Endpoint not found' });
+  if (!isProduction) {
+    try {
+      const vite = await createViteServer({
+        server: { middlewareMode: true },
+        appType: 'spa',
+      });
+      app.use(vite.middlewares);
+    } catch (e) {
+      console.warn('[Tasveer] Failed to mount vite middleware, falling back to static:', e);
+    }
   }
-  res.sendFile(path.resolve(distPath, 'index.html'));
-});
 
-app.listen(port, '0.0.0.0', () => {
-  console.log(`[Tasveer Backend] Dev server running at http://0.0.0.0:${port}`);
-});
+  if (fs.existsSync(distPath)) {
+    app.use(express.static(distPath));
+  }
+
+  app.use((req: Request, res: Response) => {
+    if (req.path.startsWith('/api/')) {
+      return res.status(404).json({ error: 'Endpoint not found' });
+    }
+    if (fs.existsSync(distIndex)) {
+      return res.sendFile(distIndex);
+    }
+    const rootIndex = path.resolve(__dirname, 'index.html');
+    if (fs.existsSync(rootIndex)) {
+      return res.sendFile(rootIndex);
+    }
+    res.status(404).send('Application entry point not found');
+  });
+
+  app.listen(port, '0.0.0.0', () => {
+    console.log(`[Tasveer Backend] Dev server running at http://0.0.0.0:${port}`);
+  });
+}
+
+startServer();
