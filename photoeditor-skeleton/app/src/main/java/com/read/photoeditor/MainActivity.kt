@@ -14,6 +14,7 @@ import android.util.Base64
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.lifecycle.lifecycleScope
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -87,6 +88,7 @@ class MainActivity : ComponentActivity() {
 
     private var tripsState: MutableState<List<Trip>>? = null
     private var screenshotCountState: MutableState<Int>? = null
+    private var isLoadingState: MutableState<Boolean>? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -99,8 +101,10 @@ class MainActivity : ComponentActivity() {
         setContent {
             val trips = remember { mutableStateOf<List<Trip>>(emptyList()) }
             val screenshotCount = remember { mutableIntStateOf(0) }
+            val isLoading = remember { mutableStateOf(true) }
             tripsState = trips
             screenshotCountState = screenshotCount
+            isLoadingState = isLoading
             val navController = rememberNavController()
 
             Surface {
@@ -108,6 +112,7 @@ class MainActivity : ComponentActivity() {
                     navController = navController,
                     trips = trips.value,
                     screenshotCount = screenshotCount.intValue,
+                    isLoading = isLoading.value,
                     editLogRepository = editLogRepository
                 )
             }
@@ -122,13 +127,18 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun loadAndShowPhotos() {
-        val photos = photoRepository.loadAllPhotos()
-        val screenshots = photos.filter { it.isScreenshot }
-        screenshotCountState?.value = screenshots.size
+        isLoadingState?.value = true
+        lifecycleScope.launch(Dispatchers.IO) {
+            val photos = photoRepository.loadAllPhotos()
+            val screenshots = photos.filter { it.isScreenshot }
+            val trips = TripClusterer().cluster(photos, this@MainActivity)
 
-        // Feature 7: Pass context for Android Geocoder reverse-geocoding
-        val trips = TripClusterer().cluster(photos, this)
-        tripsState?.value = trips
+            withContext(Dispatchers.Main) {
+                screenshotCountState?.value = screenshots.size
+                tripsState?.value = trips
+                isLoadingState?.value = false
+            }
+        }
     }
 }
 
@@ -147,6 +157,7 @@ fun AppNavHost(
     navController: NavHostController,
     trips: List<Trip>,
     screenshotCount: Int,
+    isLoading: Boolean = false,
     editLogRepository: EditLogRepository
 ) {
     val context = LocalContext.current
@@ -168,6 +179,7 @@ fun AppNavHost(
             GalleryScreen(
                 trips = trips,
                 screenshotCount = screenshotCount,
+                isLoading = isLoading,
                 onTripClick = { trip ->
                     selectedTrip = trip
                     navController.navigate("trip")

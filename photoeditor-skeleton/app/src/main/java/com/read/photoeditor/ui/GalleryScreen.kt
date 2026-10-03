@@ -26,12 +26,14 @@ import java.util.*
  * - Working Material3 Date Range Picker (Feature 5)
  * - Screenshot auto-sorting exclusion badge (Feature 4)
  * - Settings & Dataset Progress navigation actions (Feature 2 & 6)
+ * - Background loading indicator while scanning photo library & clustering
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun GalleryScreen(
     trips: List<Trip>,
     screenshotCount: Int = 0,
+    isLoading: Boolean = false,
     onTripClick: (Trip) -> Unit,
     onSettingsClick: () -> Unit,
     onDatasetClick: () -> Unit
@@ -63,10 +65,10 @@ fun GalleryScreen(
             TopAppBar(
                 title = { Text("Tasveer Trips") },
                 actions = {
-                    IconButton(onClick = onDatasetClick, title = "Dataset Progress") {
+                    IconButton(onClick = onDatasetClick) {
                         Icon(Icons.Default.AutoAwesome, contentDescription = "Dataset Progress")
                     }
-                    IconButton(onClick = onSettingsClick, title = "Settings") {
+                    IconButton(onClick = onSettingsClick) {
                         Icon(Icons.Default.Settings, contentDescription = "Settings")
                     }
                 }
@@ -138,46 +140,81 @@ fun GalleryScreen(
                 }
             }
 
-            // Trip Cards Grid
-            LazyVerticalGrid(
-                columns = GridCells.Fixed(2),
-                contentPadding = PaddingValues(bottom = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                modifier = Modifier.weight(1f)
-            ) {
-                items(filteredTrips) { trip ->
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { onTripClick(trip) }
+            // Main Content: Loading State vs Trip Cards Grid
+            if (isLoading) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.padding(24.dp)
                     ) {
-                        Column {
-                            AsyncImage(
-                                model = trip.photos.firstOrNull()?.uri,
-                                contentDescription = null,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(150.dp)
-                            )
-                            Column(modifier = Modifier.padding(10.dp)) {
-                                // Feature 7: Real place name from reverse-geocoding, falling back to dates
-                                Text(
-                                    text = trip.locationName ?: "${dateFormat.format(Date(trip.startMillis))} Trip",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    maxLines = 1
+                        CircularProgressIndicator()
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text(
+                            text = "Scanning photo library & clustering trips...",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            } else if (filteredTrips.isEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = if (trips.isEmpty()) "No trips found in your photo library." else "No trips match the selected date filter.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            } else {
+                LazyVerticalGrid(
+                    columns = GridCells.Fixed(2),
+                    contentPadding = PaddingValues(bottom = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    items(filteredTrips) { trip ->
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onTripClick(trip) }
+                        ) {
+                            Column {
+                                AsyncImage(
+                                    model = trip.photos.firstOrNull()?.uri,
+                                    contentDescription = null,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(150.dp)
                                 )
-                                Spacer(modifier = Modifier.height(2.dp))
-                                Text(
-                                    text = "${trip.photos.size} photos",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                Text(
-                                    text = "${dateFormat.format(Date(trip.startMillis))} – ${dateFormat.format(Date(trip.endMillis))}",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
+                                Column(modifier = Modifier.padding(10.dp)) {
+                                    // Feature 7: Real place name from reverse-geocoding, falling back to dates
+                                    Text(
+                                        text = trip.locationName ?: "${dateFormat.format(Date(trip.startMillis))} Trip",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        maxLines = 1
+                                    )
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        text = "${trip.photos.size} photos",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Text(
+                                        text = "${dateFormat.format(Date(trip.startMillis))} – ${dateFormat.format(Date(trip.endMillis))}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
                             }
                         }
                     }
