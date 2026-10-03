@@ -16,7 +16,7 @@ logging for a future trained model.
 - **`data/model/EditModels.kt`** — the core data shapes: `StyleDescription`
   (semantic style, not raw numbers), `PhotoEditParams` (concrete per-photo
   output), `EditLogEntry` (the training-data row).
-- **`vlm/VLMClient.kt`** — the two-stage brain: `analyzeStyle()` turns your
+- **`vlm/VLMClient.kt`** — the two-stage brain powered by Google Gemini: `analyzeStyle()` turns your
   reference edit into a semantic description; `planEdit()` reasons about one
   new photo against that style; `replanWithCorrection()` handles the "tell it
   what went wrong" loop.
@@ -48,9 +48,9 @@ logging for a future trained model.
 5. **Blur / chromatic aberration / lens correction** — each has a TODO in
    `ImageProcessor.kt` with the recommended library/approach (ML Kit
    segmentation for blur, OpenCV for the lens-geometry stuff).
-6. **API key handling** — a hardcoded key in `MainActivity` is fine for your
+6. **API key handling** — a key in `MainActivity` is fine for your
    own testing only. Before this goes anywhere near a published app, route
-   Claude API calls through a small backend you control instead of shipping
+   Gemini API calls through a small backend you control instead of shipping
    the key in the app binary.
 
 ## Why Kotlin + Compose (not Flutter)

@@ -1,0 +1,7 @@
+{
+  "name": "Tasveer Photo Editor",
+  "description": "Personalized, per-photo AI editing with auto trip clustering, preview-first calibration, semantic style transfer, correction loop, and dataset logging.",
+  "capabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

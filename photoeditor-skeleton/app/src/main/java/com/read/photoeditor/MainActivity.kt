@@ -59,7 +59,7 @@ class MainActivity : ComponentActivity() {
 
         // TODO: don't hardcode the key — read from local.properties / a secure source,
         // and see the security note in VLMClient before this app ever leaves your device.
-        vlmClient = VLMClient(apiKey = "YOUR_ANTHROPIC_API_KEY")
+        vlmClient = VLMClient(apiKey = "YOUR_GEMINI_API_KEY")
 
         setContent {
             val trips = remember { mutableStateOf<List<Trip>>(emptyList()) }
