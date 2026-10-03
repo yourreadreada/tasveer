@@ -3,11 +3,12 @@ package com.read.photoeditor.data
 import android.content.ContentUris
 import android.content.Context
 import android.provider.MediaStore
+import androidx.exifinterface.media.ExifInterface
 import com.read.photoeditor.data.model.Photo
 
 /**
- * Pulls photos straight from the phone's MediaStore — this is the "local files"
- * access path, separate from Google Photos (whose API can't read your whole library).
+ * Pulls photos straight from the phone's MediaStore and enriches them with
+ * EXIF metadata (GPS coordinates) and screenshot classification.
  */
 class PhotoRepository(private val context: Context) {
 
@@ -17,9 +18,7 @@ class PhotoRepository(private val context: Context) {
         val projection = arrayOf(
             MediaStore.Images.Media._ID,
             MediaStore.Images.Media.DATE_TAKEN,
-            MediaStore.Images.Media.LATITUDE,   // deprecated on newer APIs — see TODO below
-            MediaStore.Images.Media.LONGITUDE,
-            MediaStore.Images.Media.BUCKET_DISPLAY_NAME // folder name, e.g. "Camera" vs "Selfies"
+            MediaStore.Images.Media.BUCKET_DISPLAY_NAME
         )
 
         val sortOrder = "${MediaStore.Images.Media.DATE_TAKEN} DESC"
@@ -43,21 +42,37 @@ class PhotoRepository(private val context: Context) {
                     MediaStore.Images.Media.EXTERNAL_CONTENT_URI, id
                 )
 
+                // Feature 4: Screenshot auto-sorting detection
+                val isScreenshot = bucket.contains("screenshot", ignoreCase = true) ||
+                        bucket.contains("screen_shot", ignoreCase = true) ||
+                        bucket.contains("captures", ignoreCase = true)
+
+                // Feature 7: Read real GPS coordinates from EXIF
+                var lat: Double? = null
+                var lng: Double? = null
+                try {
+                    context.contentResolver.openInputStream(uri)?.use { stream ->
+                        val exif = ExifInterface(stream)
+                        val latLong = FloatArray(2)
+                        if (exif.getLatLong(latLong)) {
+                            lat = latLong[0].toDouble()
+                            lng = latLong[1].toDouble()
+                        }
+                    }
+                } catch (_: Exception) {
+                    // Ignored: photo has no EXIF or stream failed
+                }
+
                 photos.add(
                     Photo(
                         id = id,
                         uri = uri.toString(),
                         takenAtMillis = takenAt,
-                        // TODO: LATITUDE/LONGITUDE columns are deprecated on API 29+.
-                        // Switch to reading EXIF directly via ExifInterface(inputStream)
-                        // for GPSLatitude/GPSLongitude — more reliable across OEMs.
-                        latitude = null,
-                        longitude = null,
+                        latitude = lat,
+                        longitude = lng,
                         isFrontCamera = bucket.contains("selfie", ignoreCase = true) ||
-                            bucket.contains("front", ignoreCase = true)
-                        // NOTE: bucket-name guessing is a rough fallback. Better signal is
-                        // EXIF's LensFacing tag where present, or comparing image dimensions
-                        // against known front/back sensor resolutions for the device.
+                                bucket.contains("front", ignoreCase = true),
+                        isScreenshot = isScreenshot
                     )
                 )
             }

@@ -9,7 +9,8 @@ data class Photo(
     val takenAtMillis: Long,
     val latitude: Double? = null,
     val longitude: Double? = null,
-    val isFrontCamera: Boolean = false // best-effort guess, see PhotoRepository
+    val isFrontCamera: Boolean = false, // best-effort guess, see PhotoRepository
+    val isScreenshot: Boolean = false
 )
 
 /** A cluster of photos the app has grouped into one "trip". */
@@ -17,7 +18,8 @@ data class Trip(
     val id: String,
     val photos: List<Photo>,
     val startMillis: Long,
-    val endMillis: Long
+    val endMillis: Long,
+    val locationName: String? = null
 )
 
 /**

@@ -1,23 +1,28 @@
 package com.read.photoeditor.data
 
+import android.content.Context
+import android.location.Geocoder
 import com.read.photoeditor.data.model.Photo
 import com.read.photoeditor.data.model.Trip
-import kotlin.math.abs
+import java.util.Locale
 
 /**
- * Groups photos into "trips" automatically, per the design we settled on:
- * primarily by date gaps, refined by location when GPS is available,
- * falling back gracefully to date-only clustering when it isn't.
+ * Groups photos into "trips" automatically:
+ * - Excludes screenshots / documents from clustering (Feature 4).
+ * - Clusters primarily by date gaps, refined by location drift when GPS is available.
+ * - Reverse-geocodes average coordinates to a real place name via Android's Geocoder (Feature 7).
  */
 class TripClusterer(
     private val maxGapHours: Long = 18,       // a gap bigger than this starts a new trip
     private val maxLocationDriftKm: Double = 50.0 // bigger jump than this also starts a new trip
 ) {
 
-    fun cluster(photos: List<Photo>): List<Trip> {
-        if (photos.isEmpty()) return emptyList()
+    fun cluster(photos: List<Photo>, context: Context? = null): List<Trip> {
+        // Feature 4: Exclude screenshots from trip clustering
+        val eligiblePhotos = photos.filter { !it.isScreenshot }
+        if (eligiblePhotos.isEmpty()) return emptyList()
 
-        val sorted = photos.sortedBy { it.takenAtMillis }
+        val sorted = eligiblePhotos.sortedBy { it.takenAtMillis }
         val trips = mutableListOf<MutableList<Photo>>(mutableListOf(sorted.first()))
 
         for (i in 1 until sorted.size) {
@@ -44,15 +49,33 @@ class TripClusterer(
         }
 
         return trips.mapIndexed { index, group ->
+            // Feature 7: Reverse-geocode average coordinates to real place name
+            var placeName: String? = null
+            val gpsPhotos = group.filter { it.latitude != null && it.longitude != null }
+            if (gpsPhotos.isNotEmpty() && context != null && Geocoder.isPresent()) {
+                try {
+                    val avgLat = gpsPhotos.map { it.latitude!! }.average()
+                    val avgLng = gpsPhotos.map { it.longitude!! }.average()
+                    val geocoder = Geocoder(context, Locale.getDefault())
+                    @Suppress("DEPRECATION")
+                    val addresses = geocoder.getFromLocation(avgLat, avgLng, 1)
+                    if (!addresses.isNullOrEmpty()) {
+                        val addr = addresses[0]
+                        placeName = addr.locality ?: addr.subAdminArea ?: addr.adminArea ?: addr.countryName
+                    }
+                } catch (_: Exception) {
+                    // Fall back to null gracefully
+                }
+            }
+
             Trip(
-                id = "trip_$index",
+                id = placeName ?: "trip_${index + 1}",
                 photos = group,
                 startMillis = group.minOf { it.takenAtMillis },
-                endMillis = group.maxOf { it.takenAtMillis }
+                endMillis = group.maxOf { it.takenAtMillis },
+                locationName = placeName
             )
         }
-        // TODO: small trips (1-2 photos) are probably not "trips" at all — consider a
-        // minimum photo-count threshold before showing a cluster as a trip in the UI.
     }
 
     private fun haversineKm(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {

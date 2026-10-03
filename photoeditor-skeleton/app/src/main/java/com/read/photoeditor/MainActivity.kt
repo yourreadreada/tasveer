@@ -35,6 +35,7 @@ import androidx.room.Room
 import com.read.photoeditor.data.EditLogDatabase
 import com.read.photoeditor.data.EditLogRepository
 import com.read.photoeditor.data.PhotoRepository
+import com.read.photoeditor.data.PhotoSaver
 import com.read.photoeditor.data.TripClusterer
 import com.read.photoeditor.data.model.EditLogEntry
 import com.read.photoeditor.data.model.Photo
@@ -42,8 +43,12 @@ import com.read.photoeditor.data.model.PhotoEditParams
 import com.read.photoeditor.data.model.StyleDescription
 import com.read.photoeditor.data.model.Trip
 import com.read.photoeditor.editing.ImageProcessor
+import com.read.photoeditor.ui.ApiKeyStorage
+import com.read.photoeditor.ui.CleanupScreen
+import com.read.photoeditor.ui.DatasetProgressScreen
 import com.read.photoeditor.ui.EditScreen
 import com.read.photoeditor.ui.GalleryScreen
+import com.read.photoeditor.ui.SettingsScreen
 import com.read.photoeditor.ui.TripScreen
 import com.read.photoeditor.vlm.VLMClient
 import kotlinx.coroutines.Dispatchers
@@ -67,13 +72,12 @@ data class EditedPhotoItem(
 /**
  * App entry point. Handles runtime permissions, clustering, and the full
  * preview-first AI photo editing workflow:
- * Gallery -> Trip -> Edit (Reference) -> [Orchestrated Trip Apply] -> Review & Correct
+ * Gallery -> Trip -> Edit (Reference) -> [Orchestrated Trip Apply] -> Review & Save
  */
 class MainActivity : ComponentActivity() {
 
     private lateinit var photoRepository: PhotoRepository
     private lateinit var editLogRepository: EditLogRepository
-    private lateinit var vlmClient: VLMClient
 
     private val requestPermission = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -82,6 +86,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private var tripsState: MutableState<List<Trip>>? = null
+    private var screenshotCountState: MutableState<Int>? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -91,19 +96,18 @@ class MainActivity : ComponentActivity() {
         val db = Room.databaseBuilder(this, EditLogDatabase::class.java, "edit_log.db").build()
         editLogRepository = EditLogRepository(db.editLogDao())
 
-        // Gemini-powered VLM client
-        vlmClient = VLMClient(apiKey = "YOUR_GEMINI_API_KEY")
-
         setContent {
             val trips = remember { mutableStateOf<List<Trip>>(emptyList()) }
+            val screenshotCount = remember { mutableIntStateOf(0) }
             tripsState = trips
+            screenshotCountState = screenshotCount
             val navController = rememberNavController()
 
             Surface {
                 AppNavHost(
                     navController = navController,
                     trips = trips.value,
-                    vlmClient = vlmClient,
+                    screenshotCount = screenshotCount.intValue,
                     editLogRepository = editLogRepository
                 )
             }
@@ -119,23 +123,30 @@ class MainActivity : ComponentActivity() {
 
     private fun loadAndShowPhotos() {
         val photos = photoRepository.loadAllPhotos()
-        val trips = TripClusterer().cluster(photos)
+        val screenshots = photos.filter { it.isScreenshot }
+        screenshotCountState?.value = screenshots.size
+
+        // Feature 7: Pass context for Android Geocoder reverse-geocoding
+        val trips = TripClusterer().cluster(photos, this)
         tripsState?.value = trips
     }
 }
 
 /**
- * Navigation graph managing the four app stages:
- * 1. "gallery" -> Cluster of trips
- * 2. "trip"    -> Grid of photos in selected trip to pick 1-2 reference photos
- * 3. "edit"    -> Reference photo calibration and one-call AI style extraction
- * 4. "review"  -> Review of all edited trip photos with per-photo correction loop
+ * Navigation graph managing app destinations:
+ * 1. "gallery"  -> Trip cluster overview with date filter & screenshot badge
+ * 2. "settings" -> API Key input with EncryptedSharedPreferences (Feature 2)
+ * 3. "dataset"  -> Dataset logging metrics toward 100-edit model (Feature 6)
+ * 4. "trip"     -> Select 1-2 reference photos or navigate to Cleanup
+ * 5. "cleanup"  -> Detect duplicates (dHash) & blurry photos (Laplacian) (Feature 3)
+ * 6. "edit"     -> Calibrate look and run batch offline execution
+ * 7. "review"   -> Review, flag corrections, and save to MediaStore (Feature 1)
  */
 @Composable
 fun AppNavHost(
     navController: NavHostController,
     trips: List<Trip>,
-    vlmClient: VLMClient,
+    screenshotCount: Int,
     editLogRepository: EditLogRepository
 ) {
     val context = LocalContext.current
@@ -149,30 +160,83 @@ fun AppNavHost(
 
     var isProcessingBatch by remember { mutableStateOf(false) }
     var batchProgressMessage by remember { mutableStateOf("") }
+    var showApiKeyPromptDialog by remember { mutableStateOf(false) }
 
     NavHost(navController = navController, startDestination = "gallery") {
         // SCREEN 1: GALLERY
         composable("gallery") {
-            GalleryScreen(trips = trips) { trip ->
-                selectedTrip = trip
-                navController.navigate("trip")
-            }
+            GalleryScreen(
+                trips = trips,
+                screenshotCount = screenshotCount,
+                onTripClick = { trip ->
+                    selectedTrip = trip
+                    navController.navigate("trip")
+                },
+                onSettingsClick = {
+                    navController.navigate("settings")
+                },
+                onDatasetClick = {
+                    navController.navigate("dataset")
+                }
+            )
         }
 
-        // SCREEN 2: TRIP SCREEN (PICK 1-2 REFERENCE PHOTOS)
+        // SCREEN 2: SETTINGS (Feature 2)
+        composable("settings") {
+            SettingsScreen(
+                onBack = { navController.popBackStack() },
+                onNavigateToDatasetProgress = { navController.navigate("dataset") }
+            )
+        }
+
+        // SCREEN 3: DATASET PROGRESS (Feature 6)
+        composable("dataset") {
+            DatasetProgressScreen(
+                editLogRepository = editLogRepository,
+                onBack = { navController.popBackStack() }
+            )
+        }
+
+        // SCREEN 4: TRIP SCREEN (PICK 1-2 REFERENCE PHOTOS OR CLEANUP)
         composable("trip") {
             val trip = selectedTrip
             if (trip != null) {
-                TripScreen(trip = trip) { references ->
-                    selectedReferences = references
-                    navController.navigate("edit")
-                }
+                TripScreen(
+                    trip = trip,
+                    onReferenceChosen = { references ->
+                        selectedReferences = references
+                        // Feature 2: Verify API Key is stored before calibrating
+                        val key = ApiKeyStorage.getApiKey(context)
+                        if (key.isBlank()) {
+                            showApiKeyPromptDialog = true
+                        } else {
+                            navController.navigate("edit")
+                        }
+                    },
+                    onNavigateToCleanup = {
+                        navController.navigate("cleanup")
+                    }
+                )
             } else {
                 LaunchedEffect(Unit) { navController.popBackStack() }
             }
         }
 
-        // SCREEN 3: EDIT REFERENCE & APPLY TO TRIP
+        // SCREEN 5: CLEANUP SCREEN (Feature 3: Duplicates & Blurry Photos)
+        composable("cleanup") {
+            val trip = selectedTrip
+            if (trip != null) {
+                CleanupScreen(
+                    trip = trip,
+                    loadBitmap = { photo -> loadBitmap(context, photo.uri) },
+                    onBack = { navController.popBackStack() }
+                )
+            } else {
+                LaunchedEffect(Unit) { navController.popBackStack() }
+            }
+        }
+
+        // SCREEN 6: EDIT REFERENCE & APPLY TO TRIP
         composable("edit") {
             val trip = selectedTrip
             val referencePhoto = selectedReferences.firstOrNull() ?: trip?.photos?.firstOrNull()
@@ -204,12 +268,15 @@ fun AppNavHost(
                         photo = referencePhoto,
                         sourceBitmap = refBitmap,
                         onConfirmReference = { referenceParams ->
-                            // FIX 1 ORCHESTRATION:
-                            // 1. Analyze style ONCE with VLM
-                            // 2. Parse conditional rules
-                            // 3. Classify lighting and apply rules locally for all other photos
-                            // 4. Log each edit to Room
-                            // 5. Navigate to review screen
+                            // Use stored API key
+                            val apiKey = ApiKeyStorage.getApiKey(context)
+                            if (apiKey.isBlank()) {
+                                showApiKeyPromptDialog = true
+                                return@EditScreen
+                            }
+
+                            val vlmClient = VLMClient(apiKey)
+
                             coroutineScope.launch {
                                 isProcessingBatch = true
                                 batchProgressMessage = "Analyzing calibration style with Gemini..."
@@ -222,18 +289,18 @@ fun AppNavHost(
                                     val beforeB64 = bitmapToBase64(refBitmap)
                                     val afterB64 = bitmapToBase64(afterRefBitmap)
 
-                                    // Step 1: Call vlmClient.analyzeStyle() ONCE
+                                    // 1. Call vlmClient.analyzeStyle() ONCE
                                     val style = withContext(Dispatchers.IO) {
                                         vlmClient.analyzeStyle(beforeB64, afterB64)
                                     }
                                     currentStyleDescription = style
 
-                                    // Step 2: Call vlmClient.parseConditionalRules(style)
+                                    // 2. Call vlmClient.parseConditionalRules(style)
                                     val rules = vlmClient.parseConditionalRules(style)
 
                                     val items = mutableListOf<EditedPhotoItem>()
 
-                                    // Reference photo itself
+                                    // Reference photo
                                     items.add(
                                         EditedPhotoItem(
                                             photo = referencePhoto,
@@ -243,7 +310,7 @@ fun AppNavHost(
                                         )
                                     )
 
-                                    // Step 4: Log reference photo
+                                    // 4. Log reference photo
                                     withContext(Dispatchers.IO) {
                                         editLogRepository.logEdit(
                                             EditLogEntry(
@@ -257,19 +324,17 @@ fun AppNavHost(
                                         )
                                     }
 
-                                    // Step 3: Loop every other photo in trip locally without calling model
+                                    // 3. For every other photo in trip: offline lighting classification & rules
                                     val remainingPhotos = trip.photos.filter { it.id != referencePhoto.id }
                                     for ((index, photo) in remainingPhotos.withIndex()) {
                                         batchProgressMessage = "Locally classifying & rendering photo ${index + 1} of ${remainingPhotos.size}..."
 
                                         val origBitmap = loadBitmap(context, photo.uri)
 
-                                        // Offline lighting classification (no API call)
                                         val lighting = withContext(Dispatchers.Default) {
                                             ImageProcessor.classifyLighting(origBitmap)
                                         }
 
-                                        // Match rule & apply parameters
                                         val photoParams = ImageProcessor.matchAndApplyRules(
                                             photoId = photo.id,
                                             lighting = lighting,
@@ -281,7 +346,6 @@ fun AppNavHost(
                                             ImageProcessor.apply(origBitmap, photoParams)
                                         }
 
-                                        // Log edit
                                         withContext(Dispatchers.IO) {
                                             editLogRepository.logEdit(
                                                 EditLogEntry(
@@ -322,7 +386,7 @@ fun AppNavHost(
             }
         }
 
-        // SCREEN 4: REVIEW & PER-PHOTO CORRECTION LOOP
+        // SCREEN 7: REVIEW, CORRECTIONS & SAVING TO MEDIASTORE (Feature 1)
         composable("review") {
             val trip = selectedTrip
             val style = currentStyleDescription
@@ -333,7 +397,9 @@ fun AppNavHost(
                     style = style,
                     items = editedPhotoItems,
                     onCorrectionRequested = { item, note ->
-                        // Re-query model ONLY for the flagged photo
+                        val apiKey = ApiKeyStorage.getApiKey(context)
+                        val vlmClient = VLMClient(apiKey)
+
                         coroutineScope.launch {
                             item.isReevaluating = true
                             try {
@@ -386,12 +452,38 @@ fun AppNavHost(
             }
         }
     }
+
+    // Feature 2: Prompt to enter API Key if missing
+    if (showApiKeyPromptDialog) {
+        AlertDialog(
+            onDismissRequest = { showApiKeyPromptDialog = false },
+            title = { Text("Gemini API Key Required") },
+            text = {
+                Text("To calibrate a trip's aesthetic, please add your Google Gemini API key in Settings. Your key is stored securely on your device.")
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showApiKeyPromptDialog = false
+                        navController.navigate("settings")
+                    }
+                ) {
+                    Text("Open Settings")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showApiKeyPromptDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
 }
 
 /**
- * Simple review screen / list of the edited photos.
- * Allows the user to inspect any photo that is wrong and trigger
- * vlmClient.replanWithCorrection() on JUST that photo.
+ * Review screen of all edited photos in the trip.
+ * Feature 1: "Accept All Edits & Finish" saves every edited photo to MediaStore
+ * under "Pictures/Tasveer Edited" with an interactive progress indicator.
  */
 @Composable
 fun TripReviewScreen(
@@ -401,12 +493,19 @@ fun TripReviewScreen(
     onCorrectionRequested: (EditedPhotoItem, String) -> Unit,
     onDone: () -> Unit
 ) {
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
+
     var inspectingItem by remember { mutableStateOf<EditedPhotoItem?>(null) }
     var correctionText by remember { mutableStateOf("") }
 
+    // Feature 1: MediaStore saving progress state
+    var isSavingBatch by remember { mutableStateOf(false) }
+    var savedCount by remember { mutableIntStateOf(0) }
+
     Column(modifier = Modifier.fillMaxSize().padding(12.dp)) {
         Text(
-            text = "Trip Review: ${trip.id}",
+            text = "Trip Review: ${trip.locationName ?: trip.id}",
             style = MaterialTheme.typography.titleLarge
         )
         Text(
@@ -470,12 +569,50 @@ fun TripReviewScreen(
 
         Spacer(modifier = Modifier.height(8.dp))
 
+        // Feature 1: Save All to MediaStore
         Button(
-            onClick = onDone,
+            onClick = {
+                coroutineScope.launch {
+                    isSavingBatch = true
+                    savedCount = 0
+
+                    items.forEachIndexed { index, item ->
+                        val prefix = "tasveer_${trip.id}_${item.photo.id}_${System.currentTimeMillis()}"
+                        PhotoSaver.saveBitmapToMediaStore(context, item.editedBitmap, prefix)
+                        savedCount = index + 1
+                    }
+
+                    isSavingBatch = false
+                    onDone()
+                }
+            },
+            enabled = !isSavingBatch && items.isNotEmpty(),
             modifier = Modifier.fillMaxWidth()
         ) {
-            Text("Accept All Edits & Finish")
+            Text(if (isSavingBatch) "Saving to Pictures/Tasveer Edited..." else "Accept All Edits & Finish (${items.size})")
         }
+    }
+
+    // Feature 1: Progress indicator dialog while saving
+    if (isSavingBatch) {
+        AlertDialog(
+            onDismissRequest = {},
+            title = { Text("Saving Edited Photos") },
+            text = {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
+                    LinearProgressIndicator(
+                        progress = { savedCount.toFloat() / items.size.coerceAtLeast(1) },
+                        modifier = Modifier.fillMaxWidth().height(8.dp)
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        "Saving $savedCount of ${items.size} photos to \"Pictures/Tasveer Edited\" album...",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+            },
+            confirmButton = {}
+        )
     }
 
     // Modal dialog to trigger replanWithCorrection on a specific photo

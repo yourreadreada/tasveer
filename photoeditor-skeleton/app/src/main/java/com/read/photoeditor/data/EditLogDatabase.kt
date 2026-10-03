@@ -59,4 +59,11 @@ class EditLogRepository(private val dao: EditLogDao) {
     }
 
     suspend fun datasetSize(): Int = dao.count()
+
+    suspend fun getStats(): Pair<Int, Int> {
+        val all = dao.getAll()
+        val total = all.size
+        val corrected = all.count { it.wasCorrected }
+        return Pair(total, corrected)
+    }
 }

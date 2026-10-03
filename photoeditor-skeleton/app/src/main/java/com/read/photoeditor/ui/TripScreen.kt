@@ -6,9 +6,11 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.material3.Button
-import androidx.compose.material3.Text
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CleaningServices
+import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
@@ -18,18 +20,42 @@ import com.read.photoeditor.data.model.Trip
 
 /**
  * Shows all photos in one trip. The user selects 1-2 photos here to be the
- * "reference edit" — per the preview-first flow they asked for, nothing gets
- * touched until they've defined the look on these first.
+ * "reference edit" — per the preview-first flow, nothing gets touched until they've
+ * calibrated on these first.
+ * Also provides access to Trip Cleanup (duplicates & blurry photos).
  */
 @Composable
 fun TripScreen(
     trip: Trip,
-    onReferenceChosen: (List<Photo>) -> Unit
+    onReferenceChosen: (List<Photo>) -> Unit,
+    onNavigateToCleanup: () -> Unit
 ) {
     val selected = remember { mutableStateListOf<Photo>() }
 
-    Column {
-        Text("Select 1-2 photos to define the look for this trip", modifier = Modifier.padding(12.dp))
+    Column(modifier = Modifier.fillMaxSize()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "Select 1-2 reference photos",
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.weight(1f)
+            )
+
+            // Feature 3: Entry point to CleanupScreen
+            OutlinedButton(
+                onClick = onNavigateToCleanup,
+                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
+            ) {
+                Icon(Icons.Default.CleaningServices, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("Clean Up", style = MaterialTheme.typography.labelMedium)
+            }
+        }
 
         LazyVerticalGrid(
             columns = GridCells.Fixed(3),
@@ -62,9 +88,11 @@ fun TripScreen(
         Button(
             onClick = { onReferenceChosen(selected.toList()) },
             enabled = selected.isNotEmpty(),
-            modifier = Modifier.fillMaxWidth().padding(12.dp)
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp)
         ) {
-            Text("Edit reference photo(s) →")
+            Text("Edit reference photo(s) (${selected.size}/2) →")
         }
     }
 }
