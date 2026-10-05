@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Tasveer</string>
+    <string name="photo_widget_name">Custom Photo</string>
+    <string name="photo_widget_description">Display a custom photo of your choice on your home screen.</string>
+</resources>
