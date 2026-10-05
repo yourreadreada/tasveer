@@ -1,24 +1,67 @@
 @import "tailwindcss";
 
 @layer base {
+  :root {
+    color-scheme: dark;
+    --color-stone-950: #0c0a09;
+    --color-stone-900: #1c1917;
+    --color-stone-850: #231f1d;
+    --color-stone-800: #292524;
+    --color-stone-700: #44403c;
+    --color-stone-600: #57534e;
+    --color-stone-500: #78716c;
+    --color-stone-400: #a8a29e;
+    --color-stone-300: #d6d3d1;
+    --color-stone-200: #e7e5e4;
+    --color-stone-100: #f5f5f4;
+    --color-stone-50: #fafaf9;
+  }
+
+  [data-theme="light"],
+  .light {
+    color-scheme: light;
+    --color-stone-950: #f5f5f4; /* Warm photography paper background */
+    --color-stone-900: #ffffff; /* Crisp white surface/card */
+    --color-stone-850: #f8fafc;
+    --color-stone-800: #e7e5e4; /* Elegant subtle borders */
+    --color-stone-700: #d6d3d1; /* Border hover & secondary controls */
+    --color-stone-600: #a8a29e;
+    --color-stone-500: #78716c; /* Placeholders, icons */
+    --color-stone-400: #57534e; /* Secondary/metadata text */
+    --color-stone-300: #44403c; /* Subheadings */
+    --color-stone-200: #292524; /* Body text */
+    --color-stone-100: #1c1917; /* Main titles & headers */
+    --color-stone-50: #0c0a09;
+  }
+
   body {
-    background-color: #0c0a09;
-    color: #f5f5f4;
+    background-color: var(--color-stone-950);
+    color: var(--color-stone-100);
+    transition: background-color 0.25s ease, color 0.25s ease;
   }
 }
 
-/* Custom scrollbars for photo galleries */
+/* Light mode specific enhancements */
+[data-theme="light"] header {
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.04), 0 1px 2px -1px rgba(0, 0, 0, 0.04);
+}
+
+[data-theme="light"] .fixed.inset-0.z-50 {
+  background-color: rgba(28, 25, 23, 0.45);
+}
+
+/* Custom scrollbars */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: #1c1917;
+  background: var(--color-stone-900);
 }
 ::-webkit-scrollbar-thumb {
-  background: #44403c;
+  background: var(--color-stone-700);
   border-radius: 3px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #57534e;
+  background: var(--color-stone-600);
 }

@@ -40,11 +40,17 @@ fun TripScreen(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                text = "Select 1-2 reference photos",
-                style = MaterialTheme.typography.titleMedium,
-                modifier = Modifier.weight(1f)
-            )
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = trip.locationName ?: "Folder Photos",
+                    style = MaterialTheme.typography.titleMedium
+                )
+                Text(
+                    text = "${trip.photos.size} photos • Select 1-2 to calibrate edit",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
 
             // Feature 3: Entry point to CleanupScreen
             OutlinedButton(

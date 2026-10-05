@@ -10,10 +10,19 @@ data class Photo(
     val latitude: Double? = null,
     val longitude: Double? = null,
     val isFrontCamera: Boolean = false, // best-effort guess, see PhotoRepository
-    val isScreenshot: Boolean = false
+    val isScreenshot: Boolean = false,
+    val folderName: String = "Camera"
 )
 
-/** A cluster of photos the app has grouped into one "trip". */
+/** Represents a device folder (e.g. Camera, WhatsApp Images, Downloads) like Google Photos. */
+data class PhotoFolder(
+    val id: String,
+    val name: String,
+    val photos: List<Photo>,
+    val coverUri: String? = null
+)
+
+/** A group of photos (folder or collection) the app displays for editing. */
 data class Trip(
     val id: String,
     val photos: List<Photo>,

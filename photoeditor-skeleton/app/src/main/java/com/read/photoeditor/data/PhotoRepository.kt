@@ -72,7 +72,8 @@ class PhotoRepository(private val context: Context) {
                         longitude = lng,
                         isFrontCamera = bucket.contains("selfie", ignoreCase = true) ||
                                 bucket.contains("front", ignoreCase = true),
-                        isScreenshot = isScreenshot
+                        isScreenshot = isScreenshot,
+                        folderName = bucket.ifBlank { "Camera" }
                     )
                 )
             }

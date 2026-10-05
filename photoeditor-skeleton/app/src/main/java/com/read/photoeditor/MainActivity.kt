@@ -131,11 +131,22 @@ class MainActivity : ComponentActivity() {
         lifecycleScope.launch(Dispatchers.IO) {
             val photos = photoRepository.loadAllPhotos()
             val screenshots = photos.filter { it.isScreenshot }
-            val trips = TripClusterer().cluster(photos, this@MainActivity)
+
+            // Group photos folder-wise (Google Photos device folders style) instead of auto-clustering trips
+            val folders = photos.groupBy { it.folderName.ifBlank { "Camera" } }
+                .map { (folderName, folderPhotos) ->
+                    Trip(
+                        id = folderName,
+                        photos = folderPhotos,
+                        startMillis = folderPhotos.minOfOrNull { it.takenAtMillis } ?: 0L,
+                        endMillis = folderPhotos.maxOfOrNull { it.takenAtMillis } ?: 0L,
+                        locationName = folderName
+                    )
+                }
 
             withContext(Dispatchers.Main) {
                 screenshotCountState?.value = screenshots.size
-                tripsState?.value = trips
+                tripsState?.value = folders
                 isLoadingState?.value = false
             }
         }

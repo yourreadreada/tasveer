@@ -46,9 +46,9 @@ export const TripScreen: React.FC<TripScreenProps> = ({
             <ArrowLeft className="w-5 h-5" />
           </button>
           <div>
-            <h1 className="text-2xl font-bold text-stone-100">{trip.title || 'Trip Photos'}</h1>
+            <h1 className="text-2xl font-bold text-stone-100">{trip.title || trip.locationName || 'Folder Photos'}</h1>
             <p className="text-xs text-stone-400">
-              {trip.photos.length} photos • {trip.locationName}
+              {trip.photos.length} photos in this folder
             </p>
           </div>
         </div>

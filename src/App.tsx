@@ -22,10 +22,26 @@ export const App: React.FC = () => {
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  // Cluster photos into trips automatically (TripClusterer algorithm)
-  const trips = useMemo(() => {
-    const clusterer = new TripClusterer(18, 50.0);
-    return clusterer.cluster(photos);
+  // Group photos into folders (Google Photos style) instead of auto-clustering trips
+  const folders = useMemo(() => {
+    const map = new Map<string, Photo[]>();
+    photos.forEach((photo) => {
+      const folder = photo.folderName || 'Camera';
+      if (!map.has(folder)) map.set(folder, []);
+      map.get(folder)!.push(photo);
+    });
+
+    return Array.from(map.entries()).map(([name, folderPhotos]) => {
+      const folderTrip: Trip = {
+        id: name,
+        photos: folderPhotos,
+        startMillis: folderPhotos[0]?.takenAtMillis || 0,
+        endMillis: folderPhotos[folderPhotos.length - 1]?.takenAtMillis || 0,
+        title: name,
+        locationName: name,
+      };
+      return folderTrip;
+    });
   }, [photos]);
 
   // Load existing edit logs from backend on mount
@@ -166,7 +182,11 @@ export const App: React.FC = () => {
       {/* Main Content Area */}
       <main className="flex-1">
         {currentScreen === 'gallery' && (
-          <GalleryScreen trips={trips} onTripClick={handleSelectTrip} />
+          <GalleryScreen
+            trips={folders}
+            onTripClick={handleSelectTrip}
+            onUploadClick={() => fileInputRef.current?.click()}
+          />
         )}
 
         {currentScreen === 'trip' && selectedTrip && (

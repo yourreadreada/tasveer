@@ -1,5 +1,5 @@
 import React from 'react';
-import { Camera, Database, Sparkles, Plus, Image as ImageIcon } from 'lucide-react';
+import { Camera, Database, Plus, Image as ImageIcon, Sun, Moon } from 'lucide-react';
 import { AppScreen } from '../types';
 
 interface NavbarProps {
@@ -8,6 +8,8 @@ interface NavbarProps {
   datasetCount: number;
   onOpenDataset: () => void;
   onUploadPhotos: () => void;
+  theme: 'dark' | 'light';
+  onToggleTheme: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -16,9 +18,11 @@ export const Navbar: React.FC<NavbarProps> = ({
   datasetCount,
   onOpenDataset,
   onUploadPhotos,
+  theme,
+  onToggleTheme,
 }) => {
   return (
-    <header className="sticky top-0 z-40 bg-stone-900/90 backdrop-blur-md border-b border-stone-800">
+    <header className="sticky top-0 z-40 bg-stone-900/90 backdrop-blur-md border-b border-stone-800 transition-colors">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
         {/* Brand */}
         <div className="flex items-center gap-3 cursor-pointer" onClick={() => onNavigate('gallery')}>
@@ -37,12 +41,12 @@ export const Navbar: React.FC<NavbarProps> = ({
         </div>
 
         {/* Navigation & Controls */}
-        <div className="flex items-center gap-2 sm:gap-4">
+        <div className="flex items-center gap-2 sm:gap-3">
           <button
             onClick={() => onNavigate('gallery')}
             className={`px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-colors flex items-center gap-1.5 ${
               currentScreen === 'gallery'
-                ? 'bg-stone-800 text-stone-100'
+                ? 'bg-stone-800 text-stone-100 shadow-sm'
                 : 'text-stone-400 hover:text-stone-200 hover:bg-stone-800/50'
             }`}
           >
@@ -52,7 +56,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           <button
             onClick={onUploadPhotos}
-            className="px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium bg-stone-800 hover:bg-stone-700 text-stone-200 transition-colors flex items-center gap-1.5 border border-stone-700"
+            className="px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium bg-stone-800 hover:bg-stone-700 text-stone-200 transition-colors flex items-center gap-1.5 border border-stone-700 shadow-sm"
           >
             <Plus className="w-4 h-4 text-amber-400" />
             <span className="hidden sm:inline">Add Photos</span>
@@ -61,7 +65,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           {/* Dataset logging status badge (Path A -> Path B bridge) */}
           <button
             onClick={onOpenDataset}
-            className="px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium bg-stone-900 hover:bg-stone-800 text-stone-300 transition-all flex items-center gap-2 border border-stone-700/60"
+            className="px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium bg-stone-900 hover:bg-stone-800 text-stone-300 transition-all flex items-center gap-2 border border-stone-700/60 shadow-sm"
             title="Logged dataset for future model training"
           >
             <Database className="w-3.5 h-3.5 text-emerald-400" />
@@ -69,6 +73,26 @@ export const Navbar: React.FC<NavbarProps> = ({
             <span className="inline-flex items-center justify-center px-1.5 py-0.2 rounded-full text-xs font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
               {datasetCount}
             </span>
+          </button>
+
+          {/* Theme Switcher Toggle */}
+          <button
+            onClick={onToggleTheme}
+            className="px-2.5 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all flex items-center gap-1.5 bg-stone-900 hover:bg-stone-800 text-stone-300 hover:text-stone-100 border border-stone-700/60 shadow-sm active:scale-95"
+            title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+            aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+          >
+            {theme === 'dark' ? (
+              <>
+                <Sun className="w-4 h-4 text-amber-400 transition-transform duration-300 hover:rotate-45" />
+                <span className="hidden md:inline text-xs font-medium">Light</span>
+              </>
+            ) : (
+              <>
+                <Moon className="w-4 h-4 text-amber-600 transition-transform duration-300 hover:-rotate-12" />
+                <span className="hidden md:inline text-xs font-medium">Dark</span>
+              </>
+            )}
           </button>
         </div>
       </div>

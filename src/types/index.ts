@@ -7,6 +7,15 @@ export interface Photo {
   isFrontCamera?: boolean;
   title?: string;
   locationName?: string;
+  folderName?: string;
+}
+
+export interface PhotoFolder {
+  id: string;
+  name: string;
+  photos: Photo[];
+  coverPhotoUri: string;
+  photoCount: number;
 }
 
 export interface Trip {
